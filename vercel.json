@@ -1,6 +1,11 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "next.config.js", "use": "@vercel/next" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["fra1"],
+  "functions": {
+    "app/**": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
 }

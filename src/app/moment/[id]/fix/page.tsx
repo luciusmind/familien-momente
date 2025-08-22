@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
-import { useIsAdmin } from "@/lib/useIsAdmin";
+import useIsAdmin from "@/lib/useIsAdmin";
 
 const PHOTOS_BUCKET = "photos";
 const COLLAGES_BUCKET = "collages";
