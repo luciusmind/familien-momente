@@ -1,169 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
 
 type FileItem = { name: string; updated_at?: string };
-const BUCKET = "photos";
-
-export default function MomentPage() {
-  const params = useParams<{ id: string }>();
-  const momentId = params?.id as string;
-
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [items, setItems] = useState<FileItem[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
-  const [isAuthed, setIsAuthed] = useState(false);
-
-  // Login-Status prüfen
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setIsAuthed(!!data.session);
-    });
-  }, []);
-
-  const loadList = async () => {
-    if (!momentId) return;
-    setLoadingList(true);
-    setMessage("");
-
-    const { data, error } = await supabase.storage.from(BUCKET).list(momentId, {
-      limit: 100,
-      sortBy: { column: "updated_at", order: "desc" },
-    });
-
-    if (error) setMessage("Konnte Liste nicht laden: " + error.message);
-    else setItems(data || []);
-
-    setLoadingList(false);
-  };
-
-  useEffect(() => {
-    loadList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [momentId]);
-
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMessage("");
-
-    if (!file) {
-      setMessage("Bitte zuerst eine Datei auswählen.");
-      return;
-    }
-
-    try {
-      setUploading(true);
-
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) {
-        setMessage("Bitte zuerst anmelden.");
-        setUploading(false);
-        return;
-      }
-
-      const safeName = file.name.replace(/\s+/g, "_");
-      const path = `${momentId}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}-${safeName}`;
-
-      const { error: upErr } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
-
-      const { error: dbErr } = await supabase.from("moment_uploads").insert({
-        moment_id: momentId,
-        user_id: userData.user.id,
-        file_path: path,
-      });
-      if (dbErr) throw dbErr;
-
-      setMessage("Upload erfolgreich ✅");
-      setFile(null);
-      await loadList();
-    } catch (err: any) {
-      setMessage("Upload fehlgeschlagen: " + (err?.message || String(err)));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const publicUrlFor = (name: string) => {
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(`${momentId}/${name}`);
-    return data.publicUrl;
-  };
-
-  const isImage = (n: string) => /\.(jpe?g|png|gif|webp|bmp|tiff)$/i.test(n);
-  const isVideo = (n: string) => /\.(mp4|webm|ogg|mov|m4v)$/i.test(n);
-
-  return (
-    <div className="container py-6">
-      <h1 className="text-2xl font-bold mb-4">Moment: {momentId}</h1>
-
-      <form onSubmit={handleUpload} className="card p-4 grid gap-3 sm:grid-cols-[1fr_auto] items-center mb-3">
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="input bg-white text-black"
-          accept="image/*,video/*"
-        />
-        <button type="submit" className="btn" disabled={uploading || !isAuthed}>
-          {uploading ? "Lädt hoch…" : "Hochladen"}
-        </button>
-      </form>
-
-      {!isAuthed && (
-        <div className="card p-3 mb-4 text-sm">
-          Bitte zuerst <Link href="/signin" className="underline">anmelden</Link>.
-        </div>
-      )}
-
-      {message && <div className="card p-3 mb-4 text-sm">{message}</div>}
-
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Beiträge</h2>
-        <button onClick={loadList} className="btn text-sm" disabled={loadingList}>
-          {loadingList ? "Aktualisiere…" : "Neu laden"}
-        </button>
-      </div>
-
-      {items.length === 0 && !loadingList && (
-        <div className="text-sm text-neutral-400">Noch keine Dateien.</div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {items.map((it) => {
-          const url = publicUrlFor(it.name);
-          return (
-            <div key={it.name} className="card p-3">
-              <div className="text-xs text-neutral-400 mb-2 break-all">{it.name}</div>
-              {isImage(it.name) && <img src={url} alt={it.name} className="w-full rounded-xl" />}
-              {isVideo(it.name) && <video src={url} controls className="w-full rounded-xl" />}
-              {!isImage(it.name) && !isVideo(it.name) && (
-                <a href={url} target="_blank" rel="noreferrer" className="btn mt-1 inline-block">
-                  Datei öffnen
-                </a>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import { supabase } from "@/lib/supabase-browser";
-
-type FileItem = { name: string; updated_at?: string };
+type UploadRow = { moment_id: string; user_id: string; file_path: string };
 
 const BUCKET = "photos";
 
@@ -178,34 +21,47 @@ export default function MomentPage() {
     text: "Lade Dateien für diesen Moment hoch oder sieh dir bestehende Beiträge unten an.",
   });
   const [items, setItems] = useState<FileItem[]>([]);
+  const [uploads, setUploads] = useState<UploadRow[]>([]); // DB-Spiegel
   const [loadingList, setLoadingList] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Login-Status prüfen
+  // Login-Status laden
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setIsAuthed(!!data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setIsAuthed(!!data.session);
+      setUserId(data.session?.user?.id ?? null);
+    });
   }, []);
 
-  // Liste aus Storage laden
+  // Liste aus Storage + DB laden
   const loadList = async () => {
     if (!momentId) return;
     setLoadingList(true);
 
-    const { data, error } = await supabase.storage.from(BUCKET).list(momentId, {
-      limit: 100,
-      sortBy: { column: "updated_at", order: "desc" },
-    });
+    const [listRes, dbRes] = await Promise.all([
+      supabase.storage.from(BUCKET).list(momentId, {
+        limit: 200,
+        sortBy: { column: "updated_at", order: "desc" },
+      }),
+      supabase
+        .from("moment_uploads")
+        .select("moment_id,user_id,file_path")
+        .eq("moment_id", momentId),
+    ]);
 
-    if (error) {
-      setMessage({ type: "error", text: "Konnte Liste nicht laden: " + error.message });
+    if (listRes.error) {
+      setMessage({ type: "error", text: "Konnte Liste nicht laden: " + listRes.error.message });
     } else {
-      setItems(data || []);
-      if (!data || data.length === 0) {
-        setMessage({
-          type: "info",
-          text: "Noch keine Dateien vorhanden. Lade oben ein Bild oder Video hoch.",
-        });
-      }
+      setItems(listRes.data || []);
+    }
+    if (!dbRes.error) setUploads((dbRes.data || []) as UploadRow[]);
+
+    if (!listRes.error && (listRes.data || []).length === 0) {
+      setMessage({
+        type: "info",
+        text: "Noch keine Dateien vorhanden. Lade oben ein Bild oder Video hoch.",
+      });
     }
     setLoadingList(false);
   };
@@ -234,19 +90,16 @@ export default function MomentPage() {
         return;
       }
 
-      // sicherer Dateiname
       const safeName = file.name.replace(/\s+/g, "_");
       const path = `${momentId}/${Date.now()}-${Math.random()
         .toString(36)
         .slice(2)}-${safeName}`;
 
-      // 1) Datei hochladen
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
         .upload(path, file, { upsert: false });
       if (upErr) throw upErr;
 
-      // 2) Upload protokollieren (separate Tabelle)
       const { error: dbErr } = await supabase.from("moment_uploads").insert({
         moment_id: momentId,
         user_id: userData.user.id,
@@ -264,16 +117,59 @@ export default function MomentPage() {
     }
   };
 
-  // Public-URL für Rendering
+  // Löschen (Storage + DB)
+  const handleDelete = async (storageName: string) => {
+    if (!confirm("Diese Datei wirklich löschen?")) return;
+
+    const path = `${momentId}/${storageName}`;
+
+    try {
+      // DB-Zeile löschen (Policy lässt nur eigene zu)
+      const { error: dbErr } = await supabase
+        .from("moment_uploads")
+        .delete()
+        .eq("moment_id", momentId)
+        .eq("file_path", path);
+      if (dbErr) throw dbErr;
+
+      // Datei aus Storage löschen
+      const { error: stErr } = await supabase.storage.from(BUCKET).remove([path]);
+      if (stErr) throw stErr;
+
+      setMessage({ type: "ok", text: "Datei gelöscht." });
+      await loadList();
+    } catch (err: any) {
+      setMessage({ type: "error", text: "Löschen fehlgeschlagen: " + (err?.message || String(err)) });
+    }
+  };
+
+  // „Melden“ (hier nur Platzhalter)
+  const handleReport = (name: string) => {
+    alert(`Danke für deine Meldung zu: ${name}\n(Platzhalter – hier können wir später eine reports-Tabelle anlegen.)`);
+  };
+
+  // Hilfen
   const publicUrlFor = (name: string) => {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(`${momentId}/${name}`);
     return data.publicUrl;
   };
-
   const isImage = (n: string) => /\.(jpe?g|png|gif|webp|bmp|tiff)$/i.test(n);
   const isVideo = (n: string) => /\.(mp4|webm|ogg|mov|m4v)$/i.test(n);
 
-  // Klasse für Statusbox
+  // Set eigener Dateien (für Delete‑Button)
+  const ownNames = useMemo(() => {
+    if (!userId) return new Set<string>();
+    const set = new Set<string>();
+    uploads.forEach((u) => {
+      if (u.user_id === userId) {
+        const name = u.file_path.split("/").slice(-1)[0] ?? "";
+        set.add(name);
+      }
+    });
+    return set;
+  }, [uploads, userId]);
+
+  // Statusbox‑Stil
   const statusClass =
     message.type === "ok"
       ? "border-green-600/60 bg-green-900/20 text-green-300"
@@ -319,7 +215,6 @@ export default function MomentPage() {
           </button>
         </div>
 
-        {/* Sichtbare Statusbox – immer da */}
         <div className={`mt-4 rounded-xl border p-3 text-sm ${statusClass}`}>
           {!isAuthed ? (
             <span>
@@ -356,17 +251,45 @@ export default function MomentPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {items.map((it) => {
             const url = publicUrlFor(it.name);
+            const isOwn = ownNames.has(it.name);
+
             return (
               <div key={it.name} className="rounded-2xl border border-neutral-700 bg-neutral-900/60 p-3">
-                <div className="text-xs text-neutral-400 mb-2 break-all">{it.name}</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs text-neutral-400 break-all">{it.name}</div>
 
-                {isImage(it.name) && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleReport(it.name)}
+                      className="rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white px-2 py-1 text-xs"
+                      title="Melden"
+                    >
+                      Melden
+                    </button>
+                    {isOwn && (
+                      <button
+                        onClick={() => handleDelete(it.name)}
+                        className="rounded-lg bg-red-600 hover:bg-red-500 text-white px-2 py-1 text-xs"
+                        title="Löschen"
+                      >
+                        Löschen
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/\.(jpe?g|png|gif|webp|bmp|tiff)$/i.test(it.name) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={url} alt={it.name} className="w-full rounded-xl" />
-                )}
-                {isVideo(it.name) && <video src={url} controls className="w-full rounded-xl" />}
-                {!isImage(it.name) && !isVideo(it.name) && (
-                  <a href={url} target="_blank" rel="noreferrer" className="mt-1 inline-block rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2">
+                ) : /\.(mp4|webm|ogg|mov|m4v)$/i.test(it.name) ? (
+                  <video src={url} controls className="w-full rounded-xl" />
+                ) : (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2"
+                  >
                     Datei öffnen
                   </a>
                 )}

@@ -1,4 +1,6 @@
 {
-  "functions": { "regions": ["fra1"] },
-  "crons": [{ "path": "/api/freeze", "schedule": "*/10 * * * *", "method": "POST" }]
+  "version": 2,
+  "builds": [
+    { "src": "next.config.js", "use": "@vercel/next" }
+  ]
 }
