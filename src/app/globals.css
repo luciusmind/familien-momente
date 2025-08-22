@@ -1,14 +1,13 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4: eine Import-Zeile reicht */
+@import "tailwindcss";
 
-/* Basiselemente (wird vor Utilities geladen) */
+/* Basiselemente */
 @layer base {
   :root { color-scheme: light dark; }
   body { @apply bg-neutral-950 text-neutral-100; }
 }
 
-/* Eigene Komponenten/Utilities */
+/* Eigene Komponenten */
 @layer components {
   .container { @apply mx-auto max-w-3xl px-4; }
   .card { @apply rounded-2xl border border-neutral-800 bg-neutral-900/60 shadow; }

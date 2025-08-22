@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
-import { useIsAdmin } from "@/lib/useIsAdmin";
+import useIsAdmin from "@/lib/useIsAdmin";
+
 
 type UploadRow = {
   moment_id: string;
