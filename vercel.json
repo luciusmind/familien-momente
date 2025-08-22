@@ -1,3 +1,4 @@
 {
-  "functions": { "regions": ["fra1"] }
+  "functions": { "regions": ["fra1"] },
+  "crons": [{ "path": "/api/freeze", "schedule": "*/10 * * * *", "method": "POST" }]
 }
